@@ -28,6 +28,9 @@ All dependencies are included in the associated docker images. Docker requiremen
 - `nvidia-docker`
 - Nvidia Driver Version >= 440.44
 
+Do not forget to install the requirements specified in the `deep_sort` and `yolov5` directories.
+
+
 ## Before you run the tracker
 
 Github block pushes of files larger than 100 MB (https://help.github.com/en/github/managing-large-files/conditions-for-large-files). Hence you need to download two different weights: the ones for yolo and the ones for deep sort
@@ -58,3 +61,19 @@ python3 track.py --source ... --save-txt
 
 For more detailed information about the algorithms and their corresponding lisences used in this project access their official github implementations.
 
+
+## Real Time People Counter         [These are my changes.]
+
+This repository also contains code to track people entering and exiting your reference location.
+Follow the below steps to test with your custom video feed.
+
+- Run the script by passing `--list` as an additional argument.
+
+```bash
+python3 track.py --source ... --list
+```
+- This opens up a window with the first frame of the video source.
+- You need to draw the reference line used to compute the entry/exit of a person. (aka drawing the perdiction border).
+- Left click on the frame to select the one end of the prediction border and middle click on the frame for selecting the other end of the prediction border.
+- People moving from the bottom of the prediction border to the top of the prediction are considered as people entering your reference location(store/building, etc).
+- Bottom co-ordinates of the boudning box is used to estimate the movement direction.

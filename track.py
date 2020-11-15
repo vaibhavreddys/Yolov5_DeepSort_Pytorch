@@ -17,9 +17,77 @@ import torch.backends.cudnn as cudnn
 import sys
 sys.path.insert(0, './yolov5')
 
+from getFrame import n_th_frame
 
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
 
+line_left = None
+line_right = None
+first_frame = None
+line_set = False
+def click_event(event, x, y, flags, params):
+    global line_right
+    global line_left
+    global line_set
+    if not (line_left is None or line_right is None):
+        print ("Points are set")
+        line_set = True
+        return
+    if event == cv2.EVENT_LBUTTONDOWN:
+        print ("Left Click event", cv2.EVENT_LBUTTONDOWN)
+        line_left = (x, y)
+        print ("x", x, "  y", y)
+        if line_right is not None:
+            cv2.line(first_frame, line_left, line_right, thickness=2, color=(0, 255, 0), lineType=cv2.LINE_AA)
+        cv2.circle(first_frame, line_left, 5, thickness=2, color=(0, 255, 0), lineType=cv2.LINE_AA)
+
+    if event == cv2.EVENT_MBUTTONDOWN:
+        print ("Right Click event", cv2.EVENT_LBUTTONDOWN)
+        line_right = (x, y)
+        print ("x", x, " y", y)
+        if line_left is not None:
+            cv2.line(first_frame, line_left, line_right, thickness=2, color=(0, 255, 0), lineType=cv2.LINE_AA)
+        cv2.circle(first_frame, line_right, 5, thickness=2, color=(0, 255, 0), lineType=cv2.LINE_AA)
+
+def point_positions(X, Y):
+    if not line_set:
+        return 0
+    print("\n")
+    x1, y1, x2, y2, = line_left[0],line_left[1], line_right[0], line_right[1]
+    print("Line: ", x1, y1, x2, y2)
+    v1 = (x2-x1, y2-y1)   # Vector1
+    v2 = (x2-X, y2-Y)   # Vector 1
+    xp = v1[0]*v2[1] - v1[1]*v2[0]  # Cross product
+
+    if xp > 0:
+        print ("Above the line", X, Y)
+        return 1
+    elif xp < 0:
+        print ("Below the line", X, Y)
+        return -1
+    else:
+        print ("One the line", X, Y)
+        return 0
+
+def get_line_points(input_source):
+    print("Input source:", input_source)
+    frame = n_th_frame(input_source)
+    if frame is None:
+        print ("Invalid frame received")
+        return
+    print ("Valid frame received")
+    global first_frame
+    first_frame = frame
+    cv2.imshow('Frame', frame)
+    cv2.setMouseCallback('Frame', click_event, frame)
+    while not line_set:
+        cv2.imshow("Frame", first_frame)
+        if cv2.waitKey(1)==13:
+            break
+    print ("Line is at:", line_left, line_right)
+    from time import sleep
+    sleep(1)
+    cv2.destroyAllWindows()
 
 def bbox_rel(image_width, image_height,  *xyxy):
     """" Calculates the relative bounding box from absolute pixel values. """
@@ -41,6 +109,36 @@ def compute_color_for_labels(label):
     color = [int((p * (label ** 2 - label + 1)) % 255) for p in palette]
     return tuple(color)
 
+label_positions = {}
+global_positions = {'ENTRY' : 0, 'EXIT' : 0}
+def update_entry_exit_counter(label, pos):
+    entry = 1
+    exit = -1
+    current_position = point_positions(pos[0], pos[1])
+    # TODO: Need to implement the moving window technique to elimate few of the corner cases
+    # where people stop and move slowly near the prediction border.
+    print("Man: ", label, ": ", current_position)
+    if label in label_positions:
+        if current_position == entry and label_positions[label] == exit:
+            global_positions.update({'ENTRY' : global_positions['ENTRY'] + 1 })
+            # global_positions.update({'EXIT' : global_positions['EXIT'] - 1 })
+        if current_position == exit and label_positions[label] == entry:
+            # global_positions.update({'ENTRY' : global_positions['ENTRY'] - 1 })
+            global_positions.update({'EXIT' : global_positions['EXIT'] + 1 })
+    label_positions.update({ label : current_position })
+    #print (global_positions)
+
+def show_stats_on_screen(img):
+    print ("Stats:")
+    stats_bg_color = (0,51,51)
+    stats_text_color = (51, 255, 255)
+    x,y,w,h = 5,5,75,10
+    font_size, font_thickness = 1.5, 1
+    text = "Entry: " + str(global_positions['ENTRY']) + ", Exit: " + str(global_positions['EXIT'])
+    t_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_PLAIN, font_size, font_thickness)[0]
+    cv2.rectangle(img, (x, y), (x + t_size[0] + 3, y + t_size[1] + 4), stats_bg_color, -1)
+    img = cv2.putText(img, text, (x ,y + t_size[1] + 4), cv2.FONT_HERSHEY_PLAIN, font_size, stats_text_color, font_thickness)
+    print (global_positions)
 
 def draw_boxes(img, bbox, identities=None, offset=(0,0)):
     for i, box in enumerate(bbox):
@@ -53,6 +151,7 @@ def draw_boxes(img, bbox, identities=None, offset=(0,0)):
         id = int(identities[i]) if identities is not None else 0   
         color = compute_color_for_labels(id)
         label = '{}{:d}'.format("", id)
+        update_entry_exit_counter(label, (x2, y2))
         t_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_PLAIN, 2, 2)[0]
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
         cv2.rectangle(img, (x1, y1), (x1 + t_size[0] + 3, y1 + t_size[1] + 4), color, -1)
@@ -178,11 +277,17 @@ def detect(opt, save_img=False):
                             f.write(('%g ' * 10 + '\n') % (frame_idx, identity, bbox_left,
                                     bbox_top, bbox_w, bbox_h, -1, -1, -1, -1))  # label format
 
+            show_stats_on_screen(im0)
             # Print time (inference + NMS)
             print('%sDone. (%.3fs)' % (s, t2 - t1))
 
             # Stream results
             if view_img:
+                #cv2.namedWindow(p, cv2.WINDOW_NORMAL)
+                im0 = cv2.line(im0, line_left, line_right, thickness=3, color=(0,255,0), lineType=cv2.LINE_AA)
+                cv2.circle(im0, line_left, 5, thickness=2, color=(0, 255, 0), lineType=cv2.LINE_AA)
+                cv2.circle(im0, line_right, 5, thickness=2, color=(0, 255, 0), lineType=cv2.LINE_AA)
+                im0 = cv2.resize(im0, (1080, 980))
                 cv2.imshow(p, im0)
                 if cv2.waitKey(1) == ord('q'):  # q to quit
                     raise StopIteration
@@ -218,7 +323,7 @@ if __name__ == '__main__':
     parser.add_argument('--weights', type=str, default='yolov5/weights/yolov5x.pt', help='model.pt path')
     parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--output', type=str, default='inference/output', help='output folder')  # output folder
-    parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
+    parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.4, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
     parser.add_argument('--fourcc', type=str, default='mp4v', help='output video codec (verify ffmpeg support)')
@@ -230,9 +335,17 @@ if __name__ == '__main__':
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument("--config_deepsort", type=str, default="deep_sort/configs/deep_sort.yaml")
+    # parser.add_argument("--line", nargs='+', type=int)
+    parser.add_argument("--line", action='store_true')
+
     args = parser.parse_args()
     args.img_size = check_img_size(args.img_size)
     print(args)
+    print(type(args))
+    if args.line is not None and args.line: # and (len(args.line) == 4): # args type -> nargs='+'
+        get_line_points(args.source)
+    else:
+        print(" Do not draw line")
 
     with torch.no_grad():
         detect(args)
