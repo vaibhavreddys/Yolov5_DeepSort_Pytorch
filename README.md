@@ -62,7 +62,7 @@ python3 track.py --source ... --save-txt
 For more detailed information about the algorithms and their corresponding lisences used in this project access their official github implementations.
 
 
-## Real Time People Counter         [These are my changes.]
+## Real Time People Counter         [Vaibhav: These are my changes.]
 
 This repository also contains code to track people entering and exiting your reference location.
 Follow the below steps to test with your custom video feed.
@@ -76,4 +76,6 @@ python3 track.py --source ... --list
 - You need to draw the reference line used to compute the entry/exit of a person. (aka drawing the perdiction border).
 - Left click on the frame to select the one end of the prediction border and middle click on the frame for selecting the other end of the prediction border.
 - People moving from the bottom of the prediction border to the top of the prediction are considered as people entering your reference location(store/building, etc).
-- Bottom co-ordinates of the boudning box is used to estimate the movement direction.
+- By default, the bottom right co-ordinates of the boudning box is used to estimate the movement direction.
+- This can be changed to track using the centroid of the bounding box by passing `--centroid` as cmd-line argument.
+- Enable Non-Max Supression by passing `--agnostic-nms` if the input source is shaky.
