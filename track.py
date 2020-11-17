@@ -54,19 +54,21 @@ def point_positions(X, Y):
         return 0
     print("\n")
     x1, y1, x2, y2, = line_left[0],line_left[1], line_right[0], line_right[1]
-    print("Line: ", x1, y1, x2, y2)
+    #print("Line: ", x1, y1, x2, y2)
     v1 = (x2-x1, y2-y1)   # Vector1
     v2 = (x2-X, y2-Y)   # Vector 1
     xp = v1[0]*v2[1] - v1[1]*v2[0]  # Cross product
 
     if xp > 0:
-        print ("Above the line", X, Y)
+        #print ("Man Above the line", X, Y)
         return 1
     elif xp < 0:
-        print ("Below the line", X, Y)
+        #print ("Man Below the line", X, Y)
         return -1
     else:
-        print ("One the line", X, Y)
+        print ("WTF!, Man On the line", X, Y)
+        #import sys
+        #sys.exit(1)
         return 0
 
 def get_line_points(input_source):
@@ -111,22 +113,32 @@ def compute_color_for_labels(label):
 
 label_positions = {}
 global_positions = {'ENTRY' : 0, 'EXIT' : 0}
-def update_entry_exit_counter(label, pos):
+start_positions = {}
+mid_positions = {}
+
+def update_entry_exit_counter(label, pos, start_pos, mid_pos):
     entry = 1
     exit = -1
     current_position = point_positions(pos[0], pos[1])
+    current_mid_position = point_positions(mid_pos[0], mid_pos[1])
     # TODO: Need to implement the moving window technique to elimate few of the corner cases
     # where people stop and move slowly near the prediction border.
-    print("Man: ", label, ": ", current_position)
-    if label in label_positions:
-        if current_position == entry and label_positions[label] == exit:
-            global_positions.update({'ENTRY' : global_positions['ENTRY'] + 1 })
-            # global_positions.update({'EXIT' : global_positions['EXIT'] - 1 })
-        if current_position == exit and label_positions[label] == entry:
-            # global_positions.update({'ENTRY' : global_positions['ENTRY'] - 1 })
-            global_positions.update({'EXIT' : global_positions['EXIT'] + 1 })
+    if label in label_positions and label in mid_positions:
+        if current_position == entry and ( label_positions[label] == exit or label_positions[label] == 0): # and \
+            #(current_mid_position == entry and mid_positions[label] == entry):
+                print("Man {}: entry".format(label))
+                print ("Label positions: ", label_positions)
+                print ("Mid Position: ", mid_positions)
+                global_positions.update({'ENTRY' : global_positions['ENTRY'] + 1 })
+        if current_position == exit and ( label_positions[label] == entry or label_positions[label] == 0): # and \
+            #(current_mid_position == entry and mid_positions[label] == entry):
+                global_positions.update({'EXIT' : global_positions['EXIT'] + 1 })
+                print ("Man {}: exit".format(label))
+                print ("Label positions: ", label_positions)
+                print ("Mid Position: ", mid_positions)
     label_positions.update({ label : current_position })
-    #print (global_positions)
+    mid_positions.update({ label : current_mid_position})
+
 
 def show_stats_on_screen(img):
     print ("Stats:")
@@ -140,9 +152,16 @@ def show_stats_on_screen(img):
     img = cv2.putText(img, text, (x ,y + t_size[1] + 4), cv2.FONT_HERSHEY_PLAIN, font_size, stats_text_color, font_thickness)
     print (global_positions)
 
-def draw_boxes(img, bbox, identities=None, offset=(0,0)):
+def draw_boxes(img, bbox, centroid_tracking, identities=None, offset=(0,0)):
     for i, box in enumerate(bbox):
         x1, y1, x2, y2 = [int(i) for i in box]
+        cv2.circle(img, (x2, y2), 5, thickness=2, color=(255, 0, 0), lineType=cv2.LINE_AA)
+        cv2.circle(img, (x1, y1), 5, thickness=2, color=(0, 0, 255), lineType=cv2.LINE_AA)
+        mid_x, mid_y = (x1 + x2) // 2, (y2 + y1) // 2
+        #print("\n(x1, y1)=({},{})".format(x1,y1))
+        #print("(MID-X, MID-Y)=({},{})".format(mid_x,mid_y))
+        #print("(x2, y2)=({},{})".format(x2,y2))
+        cv2.circle(img, (mid_x, mid_y), 5, thickness=2, color=(0, 255, 0), lineType=cv2.LINE_AA)
         x1 += offset[0]
         x2 += offset[0]
         y1 += offset[1]
@@ -151,7 +170,10 @@ def draw_boxes(img, bbox, identities=None, offset=(0,0)):
         id = int(identities[i]) if identities is not None else 0   
         color = compute_color_for_labels(id)
         label = '{}{:d}'.format("", id)
-        update_entry_exit_counter(label, (x2, y2))
+        position_tracked = (x2, y2)
+        if centroid_tracking:
+            position_tracked = (mid_x, mid_y)
+        update_entry_exit_counter(label, position_tracked, (x1, y1), (mid_x, mid_y))
         t_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_PLAIN, 2, 2)[0]
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
         cv2.rectangle(img, (x1, y1), (x1 + t_size[0] + 3, y1 + t_size[1] + 4), color, -1)
@@ -160,8 +182,8 @@ def draw_boxes(img, bbox, identities=None, offset=(0,0)):
 
 
 def detect(opt, save_img=False):
-    out, source, weights, view_img, save_txt, imgsz = \
-        opt.output, opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size
+    out, source, weights, view_img, save_txt, imgsz, centroid_tracking = \
+        opt.output, opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, opt.centroid
     webcam = source == '0' or source.startswith('rtsp') or source.startswith('http') or source.endswith('.txt')
 
     # initialize deepsort
@@ -262,8 +284,10 @@ def detect(opt, save_img=False):
                 # draw boxes for visualization
                 if len(outputs) > 0:
                     bbox_xyxy = outputs[:, :4]
+                    print("\nBounding box", bbox_xyxy)
                     identities = outputs[:, -1]
-                    draw_boxes(im0, bbox_xyxy, identities)
+                    print("___________Draw_boxes now__________________________________")
+                    draw_boxes(im0, bbox_xyxy, centroid_tracking, identities)
 
                 # Write MOT compliant results to file
                 if save_txt and len(outputs) != 0:  
@@ -294,11 +318,11 @@ def detect(opt, save_img=False):
 
             # Save results (image with detections)
             if save_img:
-                print('saving img!')
+                #print('saving img!')
                 if dataset.mode == 'images':
                     cv2.imwrite(save_path, im0)
                 else:
-                    print('saving video!')
+                    #print('saving video!')
                     if vid_path != save_path:  # new video
                         vid_path = save_path
                         if isinstance(vid_writer, cv2.VideoWriter):
@@ -323,9 +347,9 @@ if __name__ == '__main__':
     parser.add_argument('--weights', type=str, default='yolov5/weights/yolov5x.pt', help='model.pt path')
     parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--output', type=str, default='inference/output', help='output folder')  # output folder
-    parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.4, help='object confidence threshold')
-    parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
+    parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
+    parser.add_argument('--conf-thres', type=float, default=0.75, help='object confidence threshold')
+    parser.add_argument('--iou-thres', type=float, default=0.75, help='IOU threshold for NMS') # Check this with 0.75
     parser.add_argument('--fourcc', type=str, default='mp4v', help='output video codec (verify ffmpeg support)')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')
@@ -335,13 +359,14 @@ if __name__ == '__main__':
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument("--config_deepsort", type=str, default="deep_sort/configs/deep_sort.yaml")
+    parser.add_argument('--centroid', action='store_true', help='Track using the centroid of the box or else use the bottom right corner')
     # parser.add_argument("--line", nargs='+', type=int)
     parser.add_argument("--line", action='store_true')
 
     args = parser.parse_args()
     args.img_size = check_img_size(args.img_size)
-    print(args)
-    print(type(args))
+    print("\nArguments passed: ", args, end="\n\n")
+    #sys.exit(0)
     if args.line is not None and args.line: # and (len(args.line) == 4): # args type -> nargs='+'
         get_line_points(args.source)
     else:
