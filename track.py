@@ -152,7 +152,7 @@ def show_stats_on_screen(img):
     img = cv2.putText(img, text, (x ,y + t_size[1] + 4), cv2.FONT_HERSHEY_PLAIN, font_size, stats_text_color, font_thickness)
     print (global_positions)
 
-def draw_boxes(img, bbox, centroid_tracking, identities=None, offset=(0,0)):
+def draw_boxes(img, bbox, centroid_tracking, half_centroid_tracking=False, identities=None, offset=(0,0)):
     for i, box in enumerate(bbox):
         x1, y1, x2, y2 = [int(i) for i in box]
         cv2.circle(img, (x2, y2), 5, thickness=2, color=(255, 0, 0), lineType=cv2.LINE_AA)
@@ -173,6 +173,9 @@ def draw_boxes(img, bbox, centroid_tracking, identities=None, offset=(0,0)):
         position_tracked = (x2, y2)
         if centroid_tracking:
             position_tracked = (mid_x, mid_y)
+        elif half_centroid_tracking:
+            hcx, hcy = (x2 + mid_x) // 2, (y2 + mid_y) // 2
+            position_tracked = (hcx, hcy)
         update_entry_exit_counter(label, position_tracked, (x1, y1), (mid_x, mid_y))
         t_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_PLAIN, 2, 2)[0]
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
@@ -182,8 +185,8 @@ def draw_boxes(img, bbox, centroid_tracking, identities=None, offset=(0,0)):
 
 
 def detect(opt, save_img=False):
-    out, source, weights, view_img, save_txt, imgsz, centroid_tracking = \
-        opt.output, opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, opt.centroid
+    out, source, weights, view_img, save_txt, imgsz, centroid_tracking, half_centroid_tracking = \
+        opt.output, opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, opt.centroid, opt.half_centroid
     webcam = source == '0' or source.startswith('rtsp') or source.startswith('http') or source.endswith('.txt')
 
     # initialize deepsort
@@ -287,7 +290,7 @@ def detect(opt, save_img=False):
                     print("\nBounding box", bbox_xyxy)
                     identities = outputs[:, -1]
                     print("___________Draw_boxes now__________________________________")
-                    draw_boxes(im0, bbox_xyxy, centroid_tracking, identities)
+                    draw_boxes(im0, bbox_xyxy, centroid_tracking, half_centroid_tracking, identities)
 
                 # Write MOT compliant results to file
                 if save_txt and len(outputs) != 0:  
@@ -360,6 +363,7 @@ if __name__ == '__main__':
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument("--config_deepsort", type=str, default="deep_sort/configs/deep_sort.yaml")
     parser.add_argument('--centroid', action='store_true', help='Track using the centroid of the box or else use the bottom right corner')
+    parser.add_argument('--half-centroid', action='store_true', help='Track using the midpoint of centroid and botton right end of the box')
     # parser.add_argument("--line", nargs='+', type=int)
     parser.add_argument("--line", action='store_true')
 
