@@ -314,8 +314,8 @@ def detect(opt, save_img=False):
                 im0 = cv2.line(im0, line_left, line_right, thickness=3, color=(0,255,0), lineType=cv2.LINE_AA)
                 cv2.circle(im0, line_left, 5, thickness=2, color=(0, 255, 0), lineType=cv2.LINE_AA)
                 cv2.circle(im0, line_right, 5, thickness=2, color=(0, 255, 0), lineType=cv2.LINE_AA)
-                im0 = cv2.resize(im0, (1080, 980))
-                cv2.imshow(p, im0)
+                resized_im0 = cv2.resize(im0, (1080, 980))
+                cv2.imshow(p, resized_im0)
                 if cv2.waitKey(1) == ord('q'):  # q to quit
                     raise StopIteration
 
