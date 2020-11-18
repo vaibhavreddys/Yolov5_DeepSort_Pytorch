@@ -78,4 +78,5 @@ python3 track.py --source ... --list
 - People moving from the bottom of the prediction border to the top of the prediction are considered as people entering your reference location(store/building, etc).
 - By default, the bottom right co-ordinates of the boudning box is used to estimate the movement direction.
 - This can be changed to track using the centroid of the bounding box by passing `--centroid` as cmd-line argument.
+- Use `--half-centroid` to slightly better accuracy in the counting. (This works correctly with overlapping bouding boxes issue.)
 - Enable Non-Max Supression by passing `--agnostic-nms` if the input source is shaky.
